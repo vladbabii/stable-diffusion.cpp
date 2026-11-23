@@ -344,7 +344,12 @@ static bool build_sdapi_img_gen_request(const json& j,
     }
 
     std::string sd_cpp_extra_args_str = extract_and_remove_sd_cpp_extra_args(request.gen_params.prompt);
-    if (!sd_cpp_extra_args_str.empty() && !request.gen_params.from_json_str(sd_cpp_extra_args_str)) {
+    // Resolve "lora" paths against --lora-model-dir, as /sdcpp/v1 does.
+    refresh_lora_cache(runtime);
+    if (!sd_cpp_extra_args_str.empty() &&
+        !request.gen_params.from_json_str(sd_cpp_extra_args_str, [&](const std::string& path) {
+            return get_lora_full_path(runtime, path);
+        })) {
         error_message = "invalid sd_cpp_extra_args";
         return false;
     }
