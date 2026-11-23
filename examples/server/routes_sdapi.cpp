@@ -4,7 +4,6 @@
 #include <cctype>
 #include <cstring>
 #include <limits>
-#include <regex>
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
@@ -17,14 +16,32 @@
 
 namespace fs = std::filesystem;
 
+// Plain string search, not std::regex: libstdc++'s regex recurses once per character, so a
+// block carrying a base64 image (hundreds of KB) overflows the stack and kills the server.
+// Same result as before: the first block's body is returned, every block is removed.
 static std::string extract_and_remove_sd_cpp_extra_args(std::string& text) {
-    std::regex re("<sd_cpp_extra_args>(.*?)</sd_cpp_extra_args>");
-    std::smatch match;
+    static const std::string open_tag  = "<sd_cpp_extra_args>";
+    static const std::string close_tag = "</sd_cpp_extra_args>";
 
     std::string extracted;
-    if (std::regex_search(text, match, re)) {
-        extracted = match[1].str();
-        text      = std::regex_replace(text, re, "");
+    bool first  = true;
+    size_t from = 0;
+    while (true) {
+        size_t start = text.find(open_tag, from);
+        if (start == std::string::npos) {
+            break;
+        }
+        size_t body = start + open_tag.size();
+        size_t end  = text.find(close_tag, body);
+        if (end == std::string::npos) {
+            break;
+        }
+        if (first) {
+            extracted = text.substr(body, end - body);
+            first     = false;
+        }
+        text.erase(start, end + close_tag.size() - start);
+        from = start;
     }
     return extracted;
 }
